@@ -1,0 +1,69 @@
+#!/usr/bin/env python3
+
+import argparse
+import configparser
+import nagiosplugin
+import requests
+import json
+
+class HealthContext(nagiosplugin.Context):
+
+    hmap = {
+        'ok': nagiosplugin.Ok,
+        'warning': nagiosplugin.Warn,
+    }
+
+    def __init__(self, name, fmt_metric=None, result_cls=nagiosplugin.Result):
+        super(HealthContext, self).__init__(name, fmt_metric, result_cls)
+
+    def evaluate(self, metric, resource):
+        value = metric.value.lower()
+        if value in HealthContext.hmap:
+            return self.result_cls(HealthContext.hmap[value], None, metric)
+        return self.result_cls(nagiosplugin.Unknown, None, metric)
+
+class Ilo(nagiosplugin.Resource):
+
+    def __init__(self, conf, host):
+        self.host = host
+        user = conf.get(host, 'username', fallback=None)
+        pasw = conf.get(host, 'password', fallback=None)
+        self.auth = (user, pasw) if user and pasw else None
+        self.vrfy = conf.getboolean(host, 'verify', fallback=True)
+
+    def req_get(self, path):
+        res = requests.get('https://' + self.host + path,
+                           auth=self.auth, verify=self.vrfy)
+        res.raise_for_status()
+        return json.loads(res.content)
+
+    def probe(self):
+        sys_list = self.req_get('/redfish/v1/systems/')
+        for sys_path in sys_list['Members']:
+            sys_data = self.req_get(sys_path['@odata.id'])
+            health = sys_data['Status']['Health']
+            yield nagiosplugin.Metric('health', health, context='health')
+
+
+@nagiosplugin.guarded
+def main():
+    requests.packages.urllib3.disable_warnings()
+
+    argp = argparse.ArgumentParser(description='Nagios plugin for HPE iLO')
+    argp.add_argument('-H', '--host', required=True)
+    argp.add_argument('-c', '--conf')
+
+    args = argp.parse_args()
+
+    conf = configparser.ConfigParser()
+    if args.conf:
+        conf.read(args.conf)
+
+    check = nagiosplugin.Check(
+        Ilo(conf, args.host),
+        HealthContext('health'),
+    )
+    check.main()
+
+if __name__ == '__main__':
+    main()
