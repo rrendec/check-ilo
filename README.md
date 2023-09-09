@@ -12,6 +12,15 @@ where a small number of servers, potentially in different networks, are monitore
 * Python 3
 * The [nagiosplugin](https://github.com/mpounsett/nagiosplugin) library
 
+## Installing
+
+```
+cp config.ini.sample /etc/nagios/ilo-config.ini
+chgrp nagios /etc/nagios/ilo-config.ini
+chmod 640 /etc/nagios/ilo-config.ini
+cp check_ilo /usr/lib64/nagios/plugins/
+```
+
 ## Useful links
 * [HPE iLO 4 API reference](https://hewlettpackard.github.io/ilo-rest-api-docs/ilo4/)
 * [nagiosplugin library documentation](https://nagiosplugin.readthedocs.io/en/stable/)
